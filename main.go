@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/rbrick/nftalert/contract/erc721meta"
+	ethutil "github.com/rbrick/nftalert/utils"
 )
 
 /*
@@ -68,52 +70,60 @@ func main() {
 		log.Fatalln(err)
 	}
 	client := ethclient.NewClient(rpcClient)
-	logsChannel := make(chan types.Log)
-	client.SubscribeFilterLogs(context.Background(), ethereum.FilterQuery{}, logsChannel)
+	// logsChannel := make(chan types.Log)
+	// client.SubscribeFilterLogs(context.Background(), ethereum.FilterQuery{}, logsChannel)
 
-	for l := range logsChannel {
-		fmt.Println(l)
-	}
-
-	// headChannel := make(chan *types.Header)
-
-	// client.SubscribeNewHead(context.Background(), headChannel)
-
-	// for {
-	// 	head := <-headChannel
-	// 	block, err := client.BlockByHash(context.Background(), head.ParentHash)
-
-	// 	if err != nil {
-	// 		log.Fatalln(err)
-	// 	}
-
-	// 	for idx, transaction := range block.Body().Transactions {
-
-	// 		receipt, err := client.TransactionReceipt(context.Background(), transaction.Hash())
-
-	// 		if receipt == nil {
-
-	// 			fmt.Println(err)
-	// 		}
-
-	// 		from, _ := ethutil.GetSenderAddress(rpcClient, block.Number(), uint(idx))
-	// 		// js, _ := transaction.MarshalJSON()
-
-	// 		if transaction.To() != nil {
-	// 			smartContract := false
-	// 			code, err := client.CodeAt(context.Background(), *transaction.To(), block.Number())
-
-	// 			if err == nil && len(code) > 0 {
-	// 				smartContract = true
-
-	// 			}
-
-	// 			fmt.Println(from.String(), "->", transaction.To(), ethutil.FormatValue(transaction.Value()), "eth", "is smart contract?", smartContract)
-	// 		} else {
-	// 			fmt.Println(from.String(), "-> 0x0 (Unknown)", transaction.Value(), "eth")
-	// 		}
-	// 	}
-	// 	// break
+	// for l := range logsChannel {
+	// 	fmt.Println(l)
 	// }
+
+	headChannel := make(chan *types.Header)
+
+	client.SubscribeNewHead(context.Background(), headChannel)
+
+	for {
+		head := <-headChannel
+		block, err := client.BlockByHash(context.Background(), head.ParentHash)
+
+		if err != nil {
+			log.Fatalln(err)
+		}
+
+		for idx, transaction := range block.Body().Transactions {
+
+			receipt, err := client.TransactionReceipt(context.Background(), transaction.Hash())
+
+			if receipt == nil {
+
+				fmt.Println(err)
+			}
+
+			from, _ := ethutil.GetSenderAddress(rpcClient, block.Number(), uint(idx))
+			// js, _ := transaction.MarshalJSON()
+
+			if transaction.To() != nil {
+				smartContract := false
+				code, err := client.CodeAt(context.Background(), *transaction.To(), block.Number())
+
+				if err == nil && len(code) > 0 {
+					smartContract = true
+
+					erc721meta, err := erc721meta.NewErc721meta(*transaction.To(), client)
+
+					if err == nil {
+						name, err := erc721meta.Name(&bind.CallOpts{})
+						if err == nil {
+							fmt.Println("Token Name:", name)
+						}
+					}
+				}
+
+				fmt.Println(from.String(), "->", transaction.To(), ethutil.FormatValue(transaction.Value()), "eth", "is smart contract?", smartContract)
+			} else {
+				fmt.Println(from.String(), "-> 0x0 (Unknown)", transaction.Value(), "eth")
+			}
+		}
+		// break
+	}
 
 }
